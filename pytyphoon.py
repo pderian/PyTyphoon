@@ -35,6 +35,7 @@ __version__ = 0.1
 ###
 import numpy
 import pywt
+import scipy
 import scipy.ndimage as ndimage
 import scipy.optimize as optimize
 ###
@@ -253,53 +254,119 @@ class Typhoon:
             U1 = pywt.waverec2(C1_list, self.wav, mode=self.wav_boundary_condition)
             U2 = pywt.waverec2(C2_list, self.wav, mode=self.wav_boundary_condition)
             ### evaluate DFD and gradient
-            dfd, (grad1, grad2) = self.core.DFD_gradient(self.im0, self.im1, U1, U2)
-            ### decompose gradient over wavelet basis, keep only up to current step
-            C1_list = pywt.wavedec2(grad1, self.wav, level=self.levels_decomp,
+            func_value, (grad1, grad2) = self.core.DFD_gradient(self.im0, self.im1, U1, U2)
+            # decompose gradient over wavelet basis, keep only up to current step
+            G1_list = pywt.wavedec2(grad1, self.wav, level=self.levels_decomp,
                                     mode=self.wav_boundary_condition)[:step+1]
-            C2_list = pywt.wavedec2(grad2, self.wav, level=self.levels_decomp,
+            G2_list = pywt.wavedec2(grad2, self.wav, level=self.levels_decomp,
                                     mode=self.wav_boundary_condition)[:step+1]
             # reshape as array
-            C1_array, _ = pywt.coeffs_to_array(C1_list)
-            C2_array, _ = pywt.coeffs_to_array(C2_list)
+            G1_array, _ = pywt.coeffs_to_array(G1_list)
+            G2_array, _ = pywt.coeffs_to_array(G2_list)
             # flatten and concatenate for l-bfgs
-            C12_array = numpy.concatenate((C1_array.ravel(), C2_array.ravel()))
-            # return DFD value and its gradient w.r.t. x
-            return dfd, C12_array.astype(numpy.float64)
+            G12_array = numpy.concatenate((G1_array.ravel(), G2_array.ravel()))
+            ### evaluate regularizer and its gradient
+            # [TODO]
+            ### return DFD + regul value, and its gradient w.r.t. x
+            return func_value, G12_array.astype(numpy.float64)
         return f_g
 
+### Helpers ###
+
+def RMSE(uvA, uvB):
+    """Root Mean Squared Error (RMSE).
+
+    :param uvA: (uA, vA)
+    :param uvB: (uB, vB)
+    :return: the RMSE.
+
+    Written by P. DERIAN 2018-01-09.
+    """
+    return numpy.sqrt(numpy.mean(numpy.sum((
+        numpy.asarray(uvA) - numpy.asarray(uvB))**2, axis=0)))
+
+### Demonstrations ###
+
 if __name__=="__main__":
+    import sys
     ###
+    import matplotlib
     import matplotlib.pyplot as pyplot
     ###
     import demo.inr as inr
     ###
+
+    def print_versions():
+        print("\nModule versions:")
+        print('Python:', sys.version)
+        print('Numpy:', numpy.__version__)
+        print('Scipy:', scipy.__version__)
+        print('PyWavelet:', pywt.__version__)
+        print('Matplotlib:', matplotlib.__version__)
+        print('PyTyphoon (this):', __version__)
 
     def demo_particles():
         """Simple demo with the synthetic particle images.
 
         Written by P. DERIAN 2018-01-09.
         """
+        print("\nPyTyphoon {} ({}) – demo".format(__version__, __file__))
+        ### load data
         im0 = ndimage.imread('demo/run010050000.tif', flatten=True).astype(float)/255.
         im1 = ndimage.imread('demo/run010050010.tif', flatten=True).astype(float)/255.
+        # Note:
+        #   - U1, V1 are vertical (1st axis) components;
+        #   - U2, V2 are horizontal (2nd axis) components.
+        # inr.ReadMotion() returns (horizontal, vertical).
         V2, V1 = inr.readMotion('demo/UVtruth.inr')
-        U1, U2 = Typhoon().solve(im0, im1, levels_decomp=3, levels_estim=None,
-                                 U1_0=None, U2_0=None)
-        fig, axes = pyplot.subplots(2,3)
-        for ax, var, label in zip(axes.T.flat,
+        ### solve OF
+        typhoon = Typhoon()
+        U1, U2 = typhoon.solve(im0, im1, wav='db2',
+                               levels_decomp=3, levels_estim=None,
+                               U1_0=None, U2_0=None)
+        ### post-process & display
+        rmse = RMSE((U1, U2), (V1, V2))
+        dpi = 72.
+        fig, axes = pyplot.subplots(2,4, figsize=(800./dpi, 450./dpi))
+        # images
+        for ax, var, label in zip(axes[:,0], [im0, im1], ['image #0', 'image #1']):
+            pi = ax.imshow(var, vmin=0., vmax=1., interpolation='nearest', cmap='gray')
+            ax.set_title(label)
+            ax.set_xticks([])
+            ax.set_yticks([])
+        # velocity fields
+        for ax, var, label in zip(axes[:,1:-1].T.flat,
                                   [U1, V1, U2, V2],
                                   ['estim U1', 'true U1', 'estim U2', 'true U2']):
-            ax.imshow(var, vmin=-3., vmax=3., interpolation='nearest', cmap='RdYlBu_r')
+            pf = ax.imshow(var, vmin=-3., vmax=3., interpolation='nearest', cmap='RdYlBu_r')
             ax.set_title(label)
-            ax.set_xticklabels([])
-            ax.set_yticklabels([])
+            ax.set_xticks([])
+            ax.set_yticks([])
+        # error maps
         for ax, var, label in zip(axes[:,-1],
                                   [V1-U1, V2-U2],
                                   ['abs(error U1)', 'abs(error U2)']):
-            ax.imshow(numpy.abs(var), vmin=0, vmax=0.3, interpolation='nearest')
+            pe = ax.imshow(numpy.abs(var), vmin=0, vmax=0.3, interpolation='nearest')
             ax.set_title(label)
-            ax.set_xticklabels([])
-            ax.set_yticklabels([])
+            ax.set_xticks([])
+            ax.set_yticks([])
+        # colormaps
+        pyplot.subplots_adjust(bottom=0.25, top=0.94, left=.05, right=.95)
+        axf = fig.add_axes([1.25/8., 0.16, 2.5/8., 0.03])
+        pyplot.colorbar(pf, cax=axf, orientation='horizontal')
+        axf.set_title('displacement (pixel)', fontdict={'fontsize':'medium'})
+        axe = fig.add_axes([4.5/8., 0.16, 2.5/8., 0.03])
+        pyplot.colorbar(pe, cax=axe, orientation='horizontal')
+        axe.set_title('error (pixel)', fontdict={'fontsize':'medium'})
+        # labels
+        pyplot.figtext(
+            0.05, 0.015, 'PyTyphoon {} demo\n"{}" wavelet, {} scales decomp., {} scales estim., no regularizer.'.format(
+                __version__, typhoon.wav.name, typhoon.levels_decomp, typhoon.levels_estim),
+            size='medium', ha='left', va='bottom')
+        pyplot.figtext(
+            0.95, 0.015, 'RMSE={:.2f}'.format(rmse),
+            size='medium', ha='right', va='bottom')
         pyplot.show()
 
+    print_versions()
     demo_particles()
