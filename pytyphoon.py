@@ -335,7 +335,7 @@ if __name__=="__main__":
             ax.set_xticks([])
             ax.set_yticks([])
         # velocity fields
-        for ax, var, label in zip(axes[:,1:-1].T.flat,
+        for ax, var, label in zip(axes[:,1:-1].flat,
                                   [U1, V1, U2, V2],
                                   ['estim U1', 'true U1', 'estim U2', 'true U2']):
             pf = ax.imshow(var, vmin=-3., vmax=3., interpolation='nearest', cmap='RdYlBu_r')
