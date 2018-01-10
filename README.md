@@ -1,24 +1,29 @@
 # PyTyphoon
-Python implementation of Typhoon algorithm: dense estimation of 2D optical flow on wavelet bases.
-
-This Python module provides an implementation of the [Typhoon motion estimator][http://www.pierrederian.net/typhoon.html].
+Python implementation of [Typhoon motion estimator](http://www.pierrederian.net/typhoon.html): dense estimation of 2D optical flow on wavelet bases, primarily aimed at **fluid motion estimation**.
 
 ## Important remark
-At the moment, the wavelet-based data term [(D&eacute;rian et al., 2013)] only is provided: the **high-order regularizers are not included** [(Kadri-Harouna et al., 2013)] in this implementation.
+At the moment, the wavelet-based data DFD term [(D&eacute;rian et al., 2013)] only is provided: the **high-order regularizers** [(Kadri-Harouna et al., 2013)] **are not included** in this implementation.
 
 ## Requirements
 - Numpy, Scipy;
 - PyWavelet;
 - Matplotlib for the demos.
+
 Tested with Anaconda Python 3.6.1, Numpy 1.12.1, Scipy 0.19.1, PyWavelet 0.5.2.
+
+## Todo
+- multi-pass estimation (pyramid) for very large displacements;
+- 3D extension?;
+- some regularizers;
+- ...
 
 ## Demos
 
 ### Synthetic particle images
+Run `python pytyphoon.py`.
 ![Particle results](demo/demo_particles.png)
 
 ## References
-
 - [(D&eacute;rian et al., 2013)]
     D&eacute;rian, P.; H&eacute;as, P.; Herzet, C. & M&eacute;min, E.
     "Wavelets and Optical Flow Motion Estimation".
