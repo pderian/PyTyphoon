@@ -17,10 +17,18 @@ Tested with Anaconda Python 3.6.1, Numpy 1.12.1, Scipy 0.19.1, PyWavelet 0.5.2.
 - some regularizers;
 - ...
 
+## Usage
+The `Typhoon` class can be imported from other modules/scripts to perform estimations as needed.
+
+The script can also work as a standalone estimator in simple cases, e.g.:
+`python pytyphoon.py -i0 path/to/im0.jpg -i1 path/to/im1.jpg -wav 'db3' --display`
+will solve the problem for image pair (`im0.jpg`, `im1.jpg`) and wavelet Daubechies-3.
+See `python pytyphoon.py -h` for the list of parameters.
+
 ## Demos
 
 ### Synthetic particle images
-Run `python pytyphoon.py`.
+Run `python pytyphoon.py --demo particles`.
 ![Particle results](demo/demo_particles.png)
 
 ## References

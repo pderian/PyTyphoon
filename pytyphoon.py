@@ -377,6 +377,9 @@ def RMSE(uvA, uvB):
 ### Demonstrations ###
 
 if __name__=="__main__":
+    ###
+    import argparse
+    import os.path
     import sys
     import time
     ###
@@ -400,7 +403,7 @@ if __name__=="__main__":
 
         Written by P. DERIAN 2018-01-09.
         """
-        print("\n* PyTyphoon {} ({}) – demo".format(__version__, __file__))
+        print('\n* PyTyphoon {} ({}) – "particles" demo'.format(__version__, __file__))
         ### load data
         im0 = ndimage.imread('demo/run010050000.tif', flatten=True).astype(float)/255.
         im1 = ndimage.imread('demo/run010050010.tif', flatten=True).astype(float)/255.
@@ -413,8 +416,8 @@ if __name__=="__main__":
         typhoon = Typhoon()
         tstart = time.clock()
         U1, U2 = typhoon.solve(im0, im1, wav='db2', mode='periodization',
-                               levels_decomp=3, levels_estim=1,
-                               )
+                               levels_decomp=3, levels_estim=1)
+
         tend = time.clock()
         print('Estimation completed in {:.2f} s.'.format(tend-tstart))
         ### post-process & display
@@ -453,7 +456,7 @@ if __name__=="__main__":
         axe.set_title('error (pixel)', fontdict={'fontsize':'medium'})
         # labels
         pyplot.figtext(
-            0.05, 0.015, 'PyTyphoon {} demo\n"{}" wavelet, {} scales decomp., {} scales estim., no regularizer.'.format(
+            0.05, 0.015, 'PyTyphoon {} "particles" demo\n"{}" wavelet, {} scales decomp., {} scales estim., no regularizer.'.format(
                 __version__, typhoon.wav.name, typhoon.levels_decomp, typhoon.levels_estim),
             size='medium', ha='left', va='bottom')
         pyplot.figtext(
@@ -461,5 +464,118 @@ if __name__=="__main__":
             size='medium', ha='right', va='bottom')
         pyplot.show()
 
-    print_versions()
-    demo_particles()
+    def main(argv):
+        """Entry point.
+
+        Written by P. DERIAN 2018-01-11.
+        """
+        ### Arguments
+        # create parser
+        parser = argparse.ArgumentParser(
+            description="Python implementation of Typhoon motion estimator.",
+            )
+        # estimation parameters
+        parser.add_argument('-i0', dest="im0", type=str, default='',
+                            help="first image")
+        parser.add_argument('-i1', dest="im1", type=str, default='',
+                            help="second image")
+        parser.add_argument('-w', '--wav', dest="wav", type=str, default=None,
+                            help="wavelet name")
+        parser.add_argument('-d', '--decomp', dest="levels_decomp", type=int, default=3,
+                            help="number of decomposition levels")
+        parser.add_argument('-e', '--estim', dest="levels_estim", type=int, default=None,
+                            help="number of estimation levels")
+        parser.add_argument('--display', dest="display_result", action='store_true',
+                            help="display estimation results")
+        # misc arguments
+        parser.add_argument('--demo', dest="demo_name", type=str, default='',
+                            help="name of the demo")
+        parser.add_argument('--version', dest="print_version", action='store_true',
+                            help="print module versions")
+        #parser.add_argument('-q', "--quiet", dest="verbose", action='store_false',
+        #                    help="set quiet mode")
+        # set defaults and parse
+        parser.set_defaults(verbose=True, print_versions=False, display_result=False)
+        args = parser.parse_args(argv)
+
+        ### Versions
+        if args.print_version:
+            print_versions()
+            return
+
+        ### Demos
+        # list of available demos
+        demos = {'particles': demo_particles,
+                 }
+        default_demo = lambda : print("[!] Unkown demo '{}', valid demos: {}".format(
+            args.demo_name, list(demos.keys())))
+        # start a demo
+        if args.demo_name:
+            demos.get(args.demo_name, default_demo)()
+            return
+
+        ### Single estimation
+        if args.im0 and args.im1:
+            print('\nEstimation:\n\t{}\n\t{}'.format(args.im0, args.im1))
+            # load images
+            im0 = ndimage.imread(args.im0, flatten=True).astype(numpy.float32)/255.
+            im1 = ndimage.imread(args.im1, flatten=True).astype(numpy.float32)/255.
+            # solve OF
+            typhoon = Typhoon()
+            tstart = time.clock()
+            U1, U2 = typhoon.solve(im0, im1, wav=args.wav, mode='periodization',
+                                   levels_decomp=args.levels_decomp,
+                                   levels_estim=args.levels_estim)
+            tend = time.clock()
+            print('Estimation completed in {:.2f} s.'.format(tend-tstart))
+            # export
+            # [TODO]
+            # display
+            if args.display_result:
+                dpi = 72.
+                fig, axes = pyplot.subplots(2,3, figsize=(800./dpi, 600./dpi))
+                # images
+                for ax, var, label in zip(axes[0,1:], [im0, im1], ['image #0', 'image #1']):
+                    pi = ax.imshow(var, vmin=0., vmax=1., interpolation='nearest', cmap='gray')
+                    ax.set_title(label)
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                axes[0,0].remove()
+                # velocity fields
+                pf = []
+                for ax, var, label in zip(axes[1,1:], [U1, U2], ['estim U1', 'estim U2']):
+                    pf.append(ax.imshow(var, interpolation='nearest', cmap='RdYlBu_r'))
+                    ax.set_title(label)
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                # colorbars?
+                # [TODO]
+                # quiver - note that array axes order is reversed
+                ax = axes[1,0]
+                ax.set_aspect('equal')
+                qstep = 8
+                ax.quiver(typhoon.core.x[1][::qstep], typhoon.core.x[0][::qstep],
+                          U2[::qstep, ::qstep], U1[::qstep, ::qstep],
+                          pivot='middle', color='b', units='xy', angles='xy')
+                ax.set_xlim(typhoon.core.x[1][0], typhoon.core.x[1][-1])
+                ax.set_ylim(typhoon.core.x[0][0], typhoon.core.x[0][-1])
+                ax.invert_yaxis()
+                ax.set_title('motion field')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                pyplot.subplots_adjust(left=.05, right=.95, top=.95, bottom=.1)
+                # labels
+                pyplot.figtext(0.05, 0.015, 'PyTyphoon {}'.format(__version__),
+                               size='medium', ha='left', va='bottom')
+                pyplot.figtext(0.05, 0.95,
+                               'im0: {}\nim1: {}\nwavelet: {}\nlevels decomp.: {}\nlevels estim.: {}'.format(
+                                    os.path.basename(args.im0),
+                                    os.path.basename(args.im1),
+                                    typhoon.wav.name,
+                                    typhoon.levels_decomp,
+                                    typhoon.levels_estim),
+                               size='medium', ha='left', va='top')
+                pyplot.show()
+
+    main(sys.argv[1:])
+
