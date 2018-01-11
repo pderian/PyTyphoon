@@ -360,6 +360,60 @@ class Typhoon:
             return func_value, G_array.astype(numpy.float64)
         return f_g
 
+    @staticmethod
+    def solve_pyramid(im0, im1, levels_pyr=1, solve_fast=False,
+                      wav='haar', levels_decomp=3, levels_estim=None,
+                      **kwargs):
+        """Wrapper for pyramidal estimation.
+
+        When very large displacements are involved, the usual pyramidal approach
+        can be employed to help achieving a correct estimation.
+
+        :param im0: the first (grayscale) image;
+        :param im1: the second (grayscale) image;
+        :param levels_pyr: number of pyramid levels;
+        :param fast: if True, use faster (but less accurate) estimation;
+        :param wav: the name of the wavelet;
+        :param levels_decomp: number of decomposition levels;
+        :param levels_estim: number of estimation levels (<=levels_decomp);
+        :param **kwargs: remaining arguments passed to Typhoon.solve().
+        :return: U, typhoon
+            U=(U1, U2, ...) the estimated displacement along the first, second, ... axes.
+            typhoon the instance of Typhoon used for the last (finest) pyramid level.
+
+        Written by P. DERIAN 2018-01-11.
+        """
+        downscale = 0.5
+        upscale = 1./downscale
+        ### create the pyramid of images
+        pyr_im0 = [im0,]
+        pyr_im1 = [im1,]
+        for l in range(levels_pyr):
+            # filter image and interpolate
+            tmp_im = ndimage.gaussian_filter(pyr_im0[0], 2./3.)
+            pyr_im0.insert(0, ndimage.interpolation.zoom(tmp_im, downscale))
+            tmp_im = ndimage.gaussian_filter(pyr_im1[0], 2./3.)
+            pyr_im1.insert(0, ndimage.interpolation.zoom(tmp_im, downscale))
+        ### for each level:
+        for l, (im0, im1) in enumerate(zip(pyr_im0, pyr_im1)):
+            # if not the first, use previous motion as first guess
+            if l:
+                U0 = [ndimage.interpolation.zoom(Ui, upscale) for Ui in U]
+            else:
+                U0 = None
+            typhoon = Typhoon()
+            if solve_fast:
+                U = typhoon.solve_fast(im0, im1, wav=wav,
+                                       levels_decomp=levels_decomp,
+                                       levels_estim=levels_estim)
+            else:
+                U = typhoon.solve(im0, im1, U0=U0, wav=wav,
+                                  levels_decomp=levels_decomp,
+                                  levels_estim=levels_estim,
+                                  **kwargs)
+        ### return the last estimates
+        return U, typhoon
+
 ### Helpers ###
 
 def RMSE(uvA, uvB):
@@ -485,6 +539,16 @@ if __name__=="__main__":
                             help="number of decomposition levels")
         parser.add_argument('-e', '--estim', dest="levels_estim", type=int, default=None,
                             help="number of estimation levels")
+        parser.add_argument('-p', '--pyr', dest="levels_pyr", type=int, default=0,
+                            help="pyramidal estimation levels")
+        parser.add_argument('--order', dest="interpolation_order", type=int, default=3,
+                            help="image interpolation order")
+        parser.add_argument('--blur', dest="sigma_blur", type=float, default=0.5,
+                            help="gaussian blur sigma")
+        parser.add_argument('--mode', dest="mode", type=str, default=None,
+                            help="signal extension mode")
+        parser.add_argument('--fast', dest="solve_fast", action='store_true',
+                            help="faster estimation (less accurate)")
         parser.add_argument('--display', dest="display_result", action='store_true',
                             help="display estimation results")
         # misc arguments
@@ -495,7 +559,8 @@ if __name__=="__main__":
         #parser.add_argument('-q', "--quiet", dest="verbose", action='store_false',
         #                    help="set quiet mode")
         # set defaults and parse
-        parser.set_defaults(verbose=True, print_versions=False, display_result=False)
+        parser.set_defaults(verbose=True, print_versions=False, display_result=False,
+                            solve_fast=False)
         args = parser.parse_args(argv)
 
         ### Versions
@@ -517,20 +582,24 @@ if __name__=="__main__":
         ### Single estimation
         if args.im0 and args.im1:
             print('\nEstimation:\n\t{}\n\t{}'.format(args.im0, args.im1))
-            # load images
+            ### load images
             im0 = ndimage.imread(args.im0, flatten=True).astype(numpy.float32)/255.
             im1 = ndimage.imread(args.im1, flatten=True).astype(numpy.float32)/255.
-            # solve OF
-            typhoon = Typhoon()
+            ### Solve problem
             tstart = time.clock()
-            U1, U2 = typhoon.solve(im0, im1, wav=args.wav, mode='periodization',
-                                   levels_decomp=args.levels_decomp,
-                                   levels_estim=args.levels_estim)
+            (U1, U2), typhoon = Typhoon.solve_pyramid(im0, im1, levels_pyr=args.levels_pyr,
+                                                      solve_fast=args.solve_fast,
+                                                      wav=args.wav, mode=args.mode,
+                                                      levels_decomp=args.levels_decomp,
+                                                      levels_estim=args.levels_estim,
+                                                      interpolation_order=args.interpolation_order,
+                                                      sigma_blur=args.sigma_blur)
             tend = time.clock()
             print('Estimation completed in {:.2f} s.'.format(tend-tstart))
             # export
-            # [TODO]
+            # [TODO] retrieve estim parameters and save as well.
             # display
+            # [TODO] move to function?
             if args.display_result:
                 dpi = 72.
                 fig, axes = pyplot.subplots(2,3, figsize=(800./dpi, 600./dpi))
@@ -568,9 +637,10 @@ if __name__=="__main__":
                 pyplot.figtext(0.05, 0.015, 'PyTyphoon {}'.format(__version__),
                                size='medium', ha='left', va='bottom')
                 pyplot.figtext(0.05, 0.95,
-                               'im0: {}\nim1: {}\nwavelet: {}\nlevels decomp.: {}\nlevels estim.: {}'.format(
+                               'im0: {}\nim1: {}\nlevels pyramid: {}\nwavelet: {}\nwav. decomp. lvls: {}\nwav. estim. lvls: {}'.format(
                                     os.path.basename(args.im0),
                                     os.path.basename(args.im1),
+                                    args.levels_pyr,
                                     typhoon.wav.name,
                                     typhoon.levels_decomp,
                                     typhoon.levels_estim),
@@ -578,4 +648,3 @@ if __name__=="__main__":
                 pyplot.show()
 
     main(sys.argv[1:])
-
