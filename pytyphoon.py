@@ -41,6 +41,8 @@ import pywt
 import scipy
 import scipy.ndimage as ndimage
 import scipy.optimize as optimize
+import scipy.interpolate as interpolate
+import matplotlib.pyplot as pyplot #TMP
 ###
 
 class OpticalFlowCore:
@@ -50,28 +52,31 @@ class OpticalFlowCore:
     Updated by P. DERIAN 2018-01-11: generic n-d version.
     """
 
-    def __init__(self, shape, dtype=numpy.float32):
+    def __init__(self, shape, dtype=numpy.float32, interpolation_order=3):
         """Constructor.
 
         :param shape: the grid shape;
         :param dtype: numpy.float32 or numpy.float64.
+        :param interpolation_order: spline interpolation order>0, faster when lower.
 
         Written by P. DERIAN 2018-01-09.
-        Updated by P. DERIAN 2018-01-11: generic n-d version.
+        Updated by P. DERIAN 2018-01-11: generic n-d version, changed boundary condition.
         """
         self.dtype = dtype
         ### grid coordinates
         self.shape = shape
         self.ndim = len(self.shape)
         # 1D
-        self.x = (numpy.arange(s, dtype=self.dtype) for s in self.shape)
+        self.x = tuple(numpy.arange(s, dtype=self.dtype) for s in self.shape)
         # N-D
         self.X = numpy.indices(self.shape, dtype=self.dtype)
         self.Xcoords = numpy.vstack((X.ravel() for X in self.X))
         ### Misc parameters
         self.sigma_blur = 0.5 #gaussian blur sigma before spatial gradient computation
-        self.interpolation_order = 3 #pixel interpolation order
-        self.boundary_condition = 'wrap' #boundary condition
+        self.interpolation_order = interpolation_order #pixel interpolation order
+        self.boundary_condition = 'mirror' #boundary condition
+        # Note: setting the bc to 'constant', 'reflect' or 'wrap' seems to cause issues...?
+        # while 'nearest', 'mirror' are OK.
         ### Buffer
         self.buffer = numpy.zeros(numpy.prod(self.shape), dtype=dtype)
 
@@ -144,34 +149,41 @@ class Typhoon:
         """
         self.core = OpticalFlowCore(shape) if (shape is not None) else None
 
-    def solve(self, im0, im1, wav='haar', levels_decomp=3, levels_estim=None,
+    def solve(self, im0, im1, wav='haar', mode=None,
+              levels_decomp=3, levels_estim=None,
               U0=None):
         """Solve the optical flow problem for given images and wavelet.
 
         :param im0: the first (grayscale) image;
         :param im1: the second (grayscale) image;
         :param wav: the name of the wavelet;
+        :param mode: the signal extension mode ('zero', 'periodization'), see [a].
         :param levels_decomp: number of decomposition levels;
         :param levels_estim: number of estimation levels (<=levels_decomp);
         :param U0: optional first guess for U as (U1_0, U2_0, ...).
         :return: U=(U1, U2, ...) the estimated displacement along the first, second, ... axes.
 
-        Note: without explicit regularization terms, it is necessary to set
-            levels_estim<levels_decomp in order to close the estimation problem.
+        Notes:
+            - without explicit regularization terms, it is necessary to set
+              levels_estim<levels_decomp in order to close the estimation problem.
+            - 'periodization' mode is much faster, but creates issues near edges.
+
+        References:
+            [a] https://pywavelets.readthedocs.io/en/latest/ref/signal-extension-modes.html
 
         Written by P. DERIAN 2018-01-09.
-        Updated by P. DERIAN 2018-01-11: generic n-d version.
+        Updated by P. DERIAN 2018-01-11: generic n-d version, checked levels.
         """
         ### Core
         # create a new core if the image shape is not compatible
         if (self.core is None) or (not numpy.testing.assert_equal(self.core.shape, im0.shape)):
             self.core = OpticalFlowCore(im0.shape)
-        ### Images
-        self.im0 = im0.astype(self.core.dtype)
-        self.im1 = im1.astype(self.core.dtype)
         ### Wavelets
         self.wav = pywt.Wavelet(wav)
-        self.wav_boundary_condition = 'periodization'
+        if (mode is None) or (mode not in pywt.Modes.modes):
+            mode = 'periodization'
+            print('[!] set mode to "{}".'.format(mode))
+        self.wav_boundary_condition = mode
         # check levels_decomp w.r.t. pywt
         levels_max = min([pywt.dwt_max_level(s, self.wav) for s in self.core.shape])
         if levels_decomp>levels_max:
@@ -186,6 +198,11 @@ class Typhoon:
         # set the final levels values
         self.levels_decomp = levels_decomp
         self.levels_estim = levels_estim if (levels_estim is not None) else self.levels_decomp-1
+        ### Images
+        # make sure the images have size compatible with decomposition levels, padding
+        # if necessary
+        self.im0 = im0.astype(self.core.dtype)
+        self.im1 = im1.astype(self.core.dtype)
         ### Motion fields
         # initialize with given fields, if any, otherwise with zeros.
         if U0 is None:
