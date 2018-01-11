@@ -47,6 +47,7 @@ class OpticalFlowCore:
     """Core functions for optical flow.
 
     Written by P. DERIAN 2018-01-09.
+    Updated by P. DERIAN 2018-01-11: generic n-d version.
     """
 
     def __init__(self, shape, dtype=numpy.float32):
@@ -56,16 +57,17 @@ class OpticalFlowCore:
         :param dtype: numpy.float32 or numpy.float64.
 
         Written by P. DERIAN 2018-01-09.
+        Updated by P. DERIAN 2018-01-11: generic n-d version.
         """
         self.dtype = dtype
         ### grid coordinates
         self.shape = shape
+        self.ndim = len(self.shape)
         # 1D
-        self.x1 = numpy.arange(shape[0], dtype=dtype)
-        self.x2 = numpy.arange(shape[1], dtype=dtype)
-        # 2D
-        self.X1, self.X2 = numpy.indices(self.shape, dtype=dtype)
-        self.X12 = numpy.vstack((self.X1.ravel(), self.X2.ravel()))
+        self.x = (numpy.arange(s, dtype=self.dtype) for s in self.shape)
+        # N-D
+        self.X = numpy.indices(self.shape, dtype=self.dtype)
+        self.Xcoords = numpy.vstack((X.ravel() for X in self.X))
         ### Misc parameters
         self.sigma_blur = 0.5 #gaussian blur sigma before spatial gradient computation
         self.interpolation_order = 3 #pixel interpolation order
@@ -73,41 +75,44 @@ class OpticalFlowCore:
         ### Buffer
         self.buffer = numpy.zeros(numpy.prod(self.shape), dtype=dtype)
 
-    def DFD(self, im0, im1, U1, U2):
+    def DFD(self, im0, im1, U):
         """Compute the DFD.
 
+        :param im0: the first (grayscale) image;
+        :param im1: the second (grayscale) image;
+        :param U: displacements (U1, U2, ...) along the first, second, ... axis;
         :return: the DFD.
 
         Written by P. DERIAN 2018-01-09.
+        Updated by P. DERIAN 2018-01-11: generic n-d version.
         """
         # warp im1
-        map_coords = self.X12.copy()
-        map_coords[0] += U1.ravel()
-        map_coords[1] += U2.ravel()
+        map_coords = self.Xcoords.copy()
+        for n in range(self.ndim):
+            map_coords[n] += U[n].ravel()
         im1_warp = ndimage.interpolation.map_coordinates(im1, map_coords,
                                                          order=self.interpolation_order,
                                                          mode=self.boundary_condition)
         # difference
         return im1_warp.reshape(self.shape) - im0
 
-    def DFD_gradient(self, im0, im1, U1, U2):
+    def DFD_gradient(self, im0, im1, U):
         """Compute the displaced frame difference (DFD) functional value and its gradients.
 
         :param im0: the first (grayscale) image;
         :param im1: the second (grayscale) image;
-        :param U1: displacment along the first axis;
-        :param U2: displacement along the second axis;
-
-        :return: dfd, (grad1, grad2)
+        :param U: displacements (U1, U2, ...) along the first, second, ... axis;
+        :return: dfd, (grad1, grad2, ...)
             - DFD: the value of the functional;
-            - grad1, grad2: the gradient of the DFD functional w.r.t. U1, U2.
+            - (grad1, grad2, ...): the gradient of the DFD functional w.r.t. component U1, U2, ....
 
         Written by P. DERIAN 2018-01-09.
+        Updated by P. DERIAN 2018-01-11: generic n-d version.
         """
         # warp im1->buffer
-        map_coords = self.X12.copy()
-        map_coords[0] += U1.ravel()
-        map_coords[1] += U2.ravel()
+        map_coords = self.Xcoords.copy()
+        for n in range(self.ndim):
+            map_coords[n] += U[n].ravel()
         ndimage.interpolation.map_coordinates(im1, map_coords,
                                               output=self.buffer,
                                               order=self.interpolation_order,
@@ -119,11 +124,10 @@ class OpticalFlowCore:
         # [TODO] use derivative of gaussians?
         if self.sigma_blur>0:
             im1_warp = ndimage.filters.gaussian_filter(im1_warp, self.sigma_blur)
-        grad1, grad2 = numpy.gradient(im1_warp)
-        grad1 *= dfd
-        grad2 *= dfd
+        grad = numpy.gradient(im1_warp)
+        grad = (g*dfd for g in grad)
         # return
-        return 0.5*numpy.sum(dfd**2), (grad1, grad2)
+        return 0.5*numpy.sum(dfd**2), grad
 
 class Typhoon:
     """Implements the Typhoon algorithm: dense optical flow estimation on wavelet bases.
@@ -269,7 +273,7 @@ class Typhoon:
             U1 = pywt.waverec2(C1_list, self.wav, mode=self.wav_boundary_condition)
             U2 = pywt.waverec2(C2_list, self.wav, mode=self.wav_boundary_condition)
             ### evaluate DFD and gradient
-            func_value, (grad1, grad2) = self.core.DFD_gradient(self.im0, self.im1, U1, U2)
+            func_value, (grad1, grad2) = self.core.DFD_gradient(self.im0, self.im1, (U1, U2))
             # decompose gradient over wavelet basis, keep only up to current step
             G1_list = pywt.wavedec2(grad1, self.wav, level=self.levels_decomp,
                                     mode=self.wav_boundary_condition)[:step+1]
