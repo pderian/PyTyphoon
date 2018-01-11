@@ -1,10 +1,13 @@
 """Python implementation of the Typhoon algorithm solving dense 2D optical flow problems.
 
-Disclaimer: this is a Python implementation of the Typhoon algorithm. The reference implementation
-    used in [4], [5] is written in C++ and GPU-accelerated with CUDA. It is the property of
-    Inria (FR) and the CSU Chico Research Foundation (Ca, USA).
-    This Python implementation is *not* exactly the same as the reference for many reasons,
-    and it is obviously much slower.
+Description: This module provides pure Python implementation of Typhoon.  At the moment,
+    only the data term [1] is provided. The high-order regularizers [2] are not implemented
+     in this module.
+
+Disclaimer: The reference implementation used in [3], [4] is written in C++ and
+    GPU-accelerated with CUDA. It is the property of Inria (FR) and the CSU Chico Research
+    Foundation (Ca, USA). This Python implementation is *not* exactly the same as the
+    reference for many reasons, and it is obviously much slower.
 
 Dependencies:
     - numpy, scipy;
@@ -163,15 +166,28 @@ class Typhoon:
         self.im0 = im0.astype(self.core.dtype)
         self.im1 = im1.astype(self.core.dtype)
         ### Wavelets
-        self.levels_decomp = levels_decomp
-        self.levels_estim = (min(levels_estim, self.levels_decomp) if (levels_estim is not None)
-                             else self.levels_decomp-1)
         self.wav = pywt.Wavelet(wav)
         self.wav_boundary_condition = 'periodization'
+        # check levels_decomp w.r.t. pywt
+        levels_max = min([pywt.dwt_max_level(s, self.wav) for s in self.core.shape])
+        if levels_decomp>levels_max:
+            print('[!] too many decomposition levels ({}) requested for given wavelet/shape, set to {}.'.format(
+                  levels_decomp, levels_max))
+            levels_decomp = levels_max
+        # check levels_estim w.r.t levels_decomp, if not None
+        if (levels_estim is not None) and (levels_estim>levels_decomp):
+            print('[!] too many estimation levels ({}) requested for decomposition, set to {}.'.format(
+                  levels_estim, levels_decomp))
+            levels_estim = levels_decomp
+        # set the final levels values
+        self.levels_decomp = levels_decomp
+        self.levels_estim = levels_estim if (levels_estim is not None) else self.levels_decomp-1
         ### Motion fields
         # initialize with given fields, if any, otherwise with zeros.
-        U1 = U1_0 if (U1_0 is not None) else numpy.zeros(self.core.shape, dtype=self.core.dtype)
-        U2 = U2_0 if (U2_0 is not None) else numpy.zeros(self.core.shape, dtype=self.core.dtype)
+        U1 = (U1_0.astype(self.core.dtype) if (U1_0 is not None)
+              else numpy.zeros(self.core.shape, dtype=self.core.dtype))
+        U2 = (U2_0.astype(self.core.dtype) if (U2_0 is not None)
+              else numpy.zeros(self.core.shape, dtype=self.core.dtype))
         # the corresponding wavelet coefficients
         self.C1_list = pywt.wavedec2(U1, self.wav, level=self.levels_decomp,
                                      mode=self.wav_boundary_condition)
@@ -184,7 +200,6 @@ class Typhoon:
         print('Decomposition over {} scales of details, {} estimated'.format(
             self.levels_decomp, self.levels_estim))
         # for each level
-        # [TODO] set last level
         for level in range(self.levels_estim+1):
             print('details ({})'.format(level) if level else 'approx. (0)')
             # the initial condition, as array (Note: flattened by l-bfgs)
@@ -210,7 +225,7 @@ class Typhoon:
             for l in range(level+1):
                 self.C1_list[l] = C1_list[l]
                 self.C2_list[l] = C2_list[l]
-        ### Rebuild
+        ### Rebuild field and return
         U1 = pywt.waverec2(self.C1_list, self.wav, mode=self.wav_boundary_condition)
         U2 = pywt.waverec2(self.C2_list, self.wav, mode=self.wav_boundary_condition)
         return U1, U2
@@ -289,6 +304,7 @@ def RMSE(uvA, uvB):
 
 if __name__=="__main__":
     import sys
+    import time
     ###
     import matplotlib
     import matplotlib.pyplot as pyplot
@@ -297,7 +313,7 @@ if __name__=="__main__":
     ###
 
     def print_versions():
-        print("\nModule versions:")
+        print("\n* Module versions:")
         print('Python:', sys.version)
         print('Numpy:', numpy.__version__)
         print('Scipy:', scipy.__version__)
@@ -310,20 +326,23 @@ if __name__=="__main__":
 
         Written by P. DERIAN 2018-01-09.
         """
-        print("\nPyTyphoon {} ({}) – demo".format(__version__, __file__))
+        print("\n* PyTyphoon {} ({}) – demo".format(__version__, __file__))
         ### load data
         im0 = ndimage.imread('demo/run010050000.tif', flatten=True).astype(float)/255.
         im1 = ndimage.imread('demo/run010050010.tif', flatten=True).astype(float)/255.
         # Note:
         #   - U1, V1 are vertical (1st axis) components;
         #   - U2, V2 are horizontal (2nd axis) components.
-        # inr.ReadMotion() returns (horizontal, vertical).
+        #   - inr.ReadMotion() returns (horizontal, vertical).
         V2, V1 = inr.readMotion('demo/UVtruth.inr')
         ### solve OF
         typhoon = Typhoon()
+        tstart = time.clock()
         U1, U2 = typhoon.solve(im0, im1, wav='db2',
-                               levels_decomp=3, levels_estim=None,
+                               levels_decomp=3, levels_estim=1,
                                U1_0=None, U2_0=None)
+        tend = time.clock()
+        print('Estimation completed in {:.2f} s.'.format(tend-tstart))
         ### post-process & display
         rmse = RMSE((U1, U2), (V1, V2))
         dpi = 72.
