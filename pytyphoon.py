@@ -47,15 +47,16 @@ class OpticalFlowCore:
     """Core functions for optical flow.
 
     Written by P. DERIAN 2018-01-09.
-    Updated by P. DERIAN 2018-01-11: generic n-d version.
+    Updated by P. DERIAN 2018-01-11: generic n-d version, added __str__().
     """
 
-    def __init__(self, shape, dtype=numpy.float32, interpolation_order=3):
+    def __init__(self, shape, dtype=numpy.float32, interpolation_order=3, sigma_blur=0.5):
         """Constructor.
 
         :param shape: the grid shape;
         :param dtype: numpy.float32 or numpy.float64.
         :param interpolation_order: spline interpolation order>0, faster when lower.
+        :param sigma_blur: sigma of gaussian blur applied before spatial gradient computation.
 
         Written by P. DERIAN 2018-01-09.
         Updated by P. DERIAN 2018-01-11: generic n-d version, changed boundary condition.
@@ -70,13 +71,23 @@ class OpticalFlowCore:
         self.X = numpy.indices(self.shape, dtype=self.dtype)
         self.Xcoords = numpy.vstack((X.ravel() for X in self.X))
         ### Misc parameters
-        self.sigma_blur = 0.5 #gaussian blur sigma before spatial gradient computation
+        self.sigma_blur = sigma_blur #gaussian blur sigma before spatial gradient computation
         self.interpolation_order = interpolation_order #pixel interpolation order
         self.boundary_condition = 'mirror' #boundary condition
         # Note: setting the bc to 'constant', 'reflect' or 'wrap' seems to cause issues...?
         # while 'nearest', 'mirror' are OK.
         ### Buffer
         self.buffer = numpy.zeros(numpy.prod(self.shape), dtype=dtype)
+
+    def __str__(self):
+        """
+        Written by P. DERIAN 2018-10-11.
+        """
+        param_str = '\n\tshape=({0[0]},{0[1]})'.format(self.shape)
+        param_str += '\n\tdtype={}'.format(self.dtype.__name__)
+        param_str += '\n\tinterpolation order={}'.format(self.interpolation_order)
+        param_str += '\n\tsigma blur={}'.format(self.sigma_blur)
+        return self.__class__.__name__ + param_str
 
     def DFD(self, im0, im1, U):
         """Compute the DFD.
@@ -136,7 +147,11 @@ class Typhoon:
     """Implements the Typhoon algorithm: dense optical flow estimation on wavelet bases.
 
     Written by P. DERIAN 2018-01-09.
+    Updated by P. DERIAN 2018-01-10: added default values and solve_fast().
     """
+
+    DEFAULT_WAV = 'haar' #default wavelet name
+    DEFAULT_MODE = 'zero' #default wavelet signal extension mode
 
     def __init__(self, shape=None):
         """Instance constructor with optional shape.
@@ -147,9 +162,10 @@ class Typhoon:
         """
         self.core = OpticalFlowCore(shape) if (shape is not None) else None
 
-    def solve(self, im0, im1, wav='haar', mode=None,
-              levels_decomp=3, levels_estim=None,
-              U0=None):
+    def solve(self, im0, im1, wav=None, mode=None,
+              levels_decomp=3, levels_estim=None, U0=None,
+              interpolation_order=3, sigma_blur=0.5,
+              ):
         """Solve the optical flow problem for given images and wavelet.
 
         :param im0: the first (grayscale) image;
@@ -159,36 +175,39 @@ class Typhoon:
         :param levels_decomp: number of decomposition levels;
         :param levels_estim: number of estimation levels (<=levels_decomp);
         :param U0: optional first guess for U as (U1_0, U2_0, ...).
+        :param interpolation_order: spline interpolation order>0, faster when lower.
+        :param sigma_blur: sigma of gaussian blur applied before spatial gradient computation.
         :return: U=(U1, U2, ...) the estimated displacement along the first, second, ... axes.
 
         Notes:
             - without explicit regularization terms, it is necessary to set
               levels_estim<levels_decomp in order to close the estimation problem.
-            - 'periodization' mode is much faster, but creates issues near edges.
+            - 'periodization' mode is much faster, but creates larger errors near edges.
 
         References:
             [a] https://pywavelets.readthedocs.io/en/latest/ref/signal-extension-modes.html
 
         Written by P. DERIAN 2018-01-09.
-        Updated by P. DERIAN 2018-01-11: generic n-d version, checked levels.
+        Updated by P. DERIAN 2018-01-11: generic n-d version, checked levels, checked shapes.
         """
-        ### Core
-        # create a new core if the image shape is not compatible
-        if (self.core is None) or (not numpy.testing.assert_equal(self.core.shape, im0.shape)):
-            self.core = OpticalFlowCore(im0.shape)
         ### Wavelets
-        self.wav = pywt.Wavelet(wav)
+        # check arguments
+        if (wav is None) or (wav not in pywt.wavelist(kind='discrete')):
+            wav = self.DEFAULT_WAV
+            print('[!] set wavelet to default "{}".'.format(wav))
         if (mode is None) or (mode not in pywt.Modes.modes):
-            mode = 'periodization'
-            print('[!] set mode to "{}".'.format(mode))
+            mode = self.DEFAULT_MODE
+            print('[!] set mode to default "{}".'.format(mode))
+        # set final values
+        self.wav = pywt.Wavelet(wav)
         self.wav_boundary_condition = mode
-        # check levels_decomp w.r.t. pywt
-        levels_max = min([pywt.dwt_max_level(s, self.wav) for s in self.core.shape])
+        # check levels_decomp argument w.r.t. pywt
+        levels_max = min([pywt.dwt_max_level(s, self.wav) for s in im0.shape])
         if levels_decomp>levels_max:
             print('[!] too many decomposition levels ({}) requested for given wavelet/shape, set to {}.'.format(
                   levels_decomp, levels_max))
             levels_decomp = levels_max
-        # check levels_estim w.r.t levels_decomp, if not None
+        # check levels_estim argument w.r.t levels_decomp, if not None
         if (levels_estim is not None) and (levels_estim>levels_decomp):
             print('[!] too many estimation levels ({}) requested for decomposition, set to {}.'.format(
                   levels_estim, levels_decomp))
@@ -196,11 +215,29 @@ class Typhoon:
         # set the final levels values
         self.levels_decomp = levels_decomp
         self.levels_estim = levels_estim if (levels_estim is not None) else self.levels_decomp-1
-        ### Images
+
+        ### Images and core
         # make sure the images have size compatible with decomposition levels, padding
-        # if necessary
+        # if necessary with zeros
+        block_size = 2**self.levels_decomp
+        # how much is missing in each axis
+        self.padd_size = tuple((block_size - (s%block_size))%block_size for s in im0.shape)
+        # the slice to crop back the original area
+        self.crop_slice = tuple(slice(None, -p if p else None, None) for p in self.padd_size)
+        # padd if necessary
+        if any(self.padd_size):
+            padding = [(0, p) for p in self.padd_size]
+            im0 = numpy.pad(im0, padding, mode='constant')
+            im1 = numpy.pad(im1, padding, mode='constant')
+        # create a new core if the image shape is not compatible
+        if (self.core is None) or (not numpy.testing.assert_equal(self.core.shape, im0.shape)):
+            self.core = OpticalFlowCore(im0.shape, interpolation_order=interpolation_order,
+                                        sigma_blur=sigma_blur)
+        print(self.core)
+        # and the images
         self.im0 = im0.astype(self.core.dtype)
         self.im1 = im1.astype(self.core.dtype)
+
         ### Motion fields
         # initialize with given fields, if any, otherwise with zeros.
         if U0 is None:
@@ -210,8 +247,10 @@ class Typhoon:
         # the corresponding wavelet coefficients
         self.C_list = [pywt.wavedecn(Ui, self.wav, level=self.levels_decomp,
                                      mode=self.wav_boundary_condition) for Ui in U]
+        tmp_list = [pywt.waverecn(Ci, self.wav, mode=self.wav_boundary_condition) for Ci in self.C_list]
         # which we reshape as arrays to get the slices for future manipulations.
         self.slices = tuple(pywt.coeffs_to_array(Ci)[1] for Ci in self.C_list)
+
         ### Solve
         print('Decomposition over {} scales of details, {} estimated'.format(
             self.levels_decomp, self.levels_estim))
@@ -240,9 +279,32 @@ class Typhoon:
             for n, Ci in enumerate(C_list):
                 for l in range(level+1):
                     self.C_list[n][l] = Ci[l]
+
         ### Rebuild field and return
-        U = tuple(pywt.waverecn(Ci, self.wav, mode=self.wav_boundary_condition) for Ci in self.C_list)
+        # cropping the relevant area
+        U = tuple(pywt.waverecn(Ci, self.wav, mode=self.wav_boundary_condition)[self.crop_slice]
+                  for Ci in self.C_list)
         return U
+
+    def solve_fast(self, im0, im1, wav='haar',
+                   levels_decomp=3, levels_estim=None, U0=None):
+        """Fastest estimation (but lower accuracy).
+
+        :param im0: the first (grayscale) image;
+        :param im1: the second (grayscale) image;
+        :param wav: the name of the wavelet;
+        :param levels_decomp: number of decomposition levels;
+        :param levels_estim: number of estimation levels (<=levels_decomp);
+        :param U0: optional first guess for U as (U1_0, U2_0, ...).
+        :return: U=(U1, U2, ...) the estimated displacement along the first, second, ... axes.
+
+        Note: uses linear (order 1) interpolation, no blurring and 'periodization' mode.
+
+        Written by P. DERIAN 2018-01-11.
+        """
+        return self.solve(im0, im1, wav=wav, mode='periodization',
+                          levels_decomp=levels_decomp, levels_estim=levels_estim,
+                          interpolation_order=1, sigma_blur=0.)
 
     def create_cost_function(self, step, shape):
         """The cost function takes wavelet coefficient as input parameters;
@@ -350,9 +412,9 @@ if __name__=="__main__":
         ### solve OF
         typhoon = Typhoon()
         tstart = time.clock()
-        U1, U2 = typhoon.solve(im0, im1, wav='db2',
+        U1, U2 = typhoon.solve(im0, im1, wav='db2', mode='periodization',
                                levels_decomp=3, levels_estim=1,
-                               U0=None)
+                               )
         tend = time.clock()
         print('Estimation completed in {:.2f} s.'.format(tend-tstart))
         ### post-process & display
