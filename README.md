@@ -5,9 +5,9 @@ Python implementation of [Typhoon motion estimator](http://www.pierrederian.net/
 At the moment, the wavelet-based data DFD term [(D&eacute;rian et al., 2013)] only is provided: the **high-order regularizers** [(Kadri-Harouna et al., 2013)] **are not included** in this implementation.
 
 ## Requirements
-- Numpy, Scipy;
-- PyWavelet;
-- Matplotlib for the demos.
+- [Numpy, Scipy](https://scipy.org/);
+- [PyWavelets](https://github.com/PyWavelets/pywt);
+- [Matplotlib](https://matplotlib.org/) for the demos.
 
 Tested with Anaconda Python 3.6.1, Numpy 1.12.1, Scipy 0.19.1, PyWavelet 0.5.2.
 
