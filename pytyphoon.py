@@ -153,14 +153,14 @@ class Typhoon:
         :param wav: the name of the wavelet;
         :param levels_decomp: number of decomposition levels;
         :param levels_estim: number of estimation levels (<=levels_decomp);
-        :param U1_0: optional first guess for U1 (same shape as images);
-        :param U2_0: optional first guess for U2 (same shape as images);
-        :return: U1, U2 the estimated displacement along the first and second axes.
+        :param U0: optional first guess for U as (U1_0, U2_0, ...).
+        :return: U=(U1, U2, ...) the estimated displacement along the first, second, ... axes.
 
         Note: without explicit regularization terms, it is necessary to set
             levels_estim<levels_decomp in order to close the estimation problem.
 
         Written by P. DERIAN 2018-01-09.
+        Updated by P. DERIAN 2018-01-11: generic n-d version.
         """
         ### Core
         # create a new core if the image shape is not compatible
@@ -193,7 +193,7 @@ class Typhoon:
         U = (Ui.astype(self.core.dtype) if (Ui is not None)
              else numpy.zeros(self.core.shape, dtype=self.core.dtype) for Ui in U0)
         # the corresponding wavelet coefficients
-        self.C_list = [pywt.wavedec2(Ui, self.wav, level=self.levels_decomp,
+        self.C_list = [pywt.wavedecn(Ui, self.wav, level=self.levels_decomp,
                                      mode=self.wav_boundary_condition) for Ui in U]
         # which we reshape as arrays to get the slices for future manipulations.
         self.slices = tuple(pywt.coeffs_to_array(Ci)[1] for Ci in self.C_list)
@@ -220,13 +220,13 @@ class Typhoon:
             print('\tcurrent functional value: {:.2f}'.format(min_value))
             # store result in main coefficients
             C_array = C_array.reshape(C_shape)
-            C_list = (pywt.array_to_coeffs(Ci, self.slices[i][:level+1], output_format='wavedec2')
+            C_list = (pywt.array_to_coeffs(Ci, self.slices[i][:level+1], output_format='wavedecn')
                       for i, Ci in enumerate(C_array))
             for n, Ci in enumerate(C_list):
                 for l in range(level+1):
                     self.C_list[n][l] = Ci[l]
         ### Rebuild field and return
-        U = [pywt.waverec2(Ci, self.wav, mode=self.wav_boundary_condition) for Ci in self.C_list]
+        U = tuple(pywt.waverecn(Ci, self.wav, mode=self.wav_boundary_condition) for Ci in self.C_list)
         return U
 
     def create_cost_function(self, step, shape):
@@ -255,6 +255,7 @@ class Typhoon:
                   as possible, possibly sacrificing some speed along the way.
 
             Written by P. DERIAN 2018-01-09.
+            Updated by P. DERIAN 2018-01-11: generic n-d version.
             """
             ### rebuild motion field
             # reshape 1d vector to 3d array
@@ -263,14 +264,14 @@ class Typhoon:
             # Note: ideally we would not complement, as finer scales are zeros. This is made
             #   necessary by pywt.
             C_list = (pywt.array_to_coeffs(xi, self.slices[i][:step+1],
-                                           output_format='wavedec2')
+                                           output_format='wavedecn')
                       + self.C_list[i][step+1:] for i, xi in enumerate(x))
             # rebuild motion field
-            U = (pywt.waverec2(Ci, self.wav, mode=self.wav_boundary_condition) for Ci in C_list)
+            U = (pywt.waverecn(Ci, self.wav, mode=self.wav_boundary_condition) for Ci in C_list)
             ### evaluate DFD and gradient
             func_value, G = self.core.DFD_gradient(self.im0, self.im1, U)
             # decompose gradient over wavelet basis, keep coefficients only up to current step
-            G_list = (pywt.wavedec2(Gi, self.wav, level=self.levels_decomp,
+            G_list = (pywt.wavedecn(Gi, self.wav, level=self.levels_decomp,
                                     mode=self.wav_boundary_condition)[:step+1]
                       for Gi in G)
             # reshape as array, flatten and concatenate for l-bfgs
