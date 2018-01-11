@@ -88,8 +88,8 @@ class OpticalFlowCore:
         """
         # warp im1
         map_coords = self.Xcoords.copy()
-        for n in range(self.ndim):
-            map_coords[n] += U[n].ravel()
+        for n, Ui in enumerate(U):
+            map_coords[n] += Ui.ravel()
         im1_warp = ndimage.interpolation.map_coordinates(im1, map_coords,
                                                          order=self.interpolation_order,
                                                          mode=self.boundary_condition)
@@ -111,8 +111,8 @@ class OpticalFlowCore:
         """
         # warp im1->buffer
         map_coords = self.Xcoords.copy()
-        for n in range(self.ndim):
-            map_coords[n] += U[n].ravel()
+        for n, Ui in enumerate(U):
+            map_coords[n] += Ui.ravel()
         ndimage.interpolation.map_coordinates(im1, map_coords,
                                               output=self.buffer,
                                               order=self.interpolation_order,
@@ -145,7 +145,7 @@ class Typhoon:
         self.core = OpticalFlowCore(shape) if (shape is not None) else None
 
     def solve(self, im0, im1, wav='haar', levels_decomp=3, levels_estim=None,
-              U1_0=None, U2_0=None):
+              U0=None):
         """Solve the optical flow problem for given images and wavelet.
 
         :param im0: the first (grayscale) image;
@@ -188,18 +188,15 @@ class Typhoon:
         self.levels_estim = levels_estim if (levels_estim is not None) else self.levels_decomp-1
         ### Motion fields
         # initialize with given fields, if any, otherwise with zeros.
-        U1 = (U1_0.astype(self.core.dtype) if (U1_0 is not None)
-              else numpy.zeros(self.core.shape, dtype=self.core.dtype))
-        U2 = (U2_0.astype(self.core.dtype) if (U2_0 is not None)
-              else numpy.zeros(self.core.shape, dtype=self.core.dtype))
+        if U0 is None:
+            U0 = [None,]*self.core.ndim
+        U = (Ui.astype(self.core.dtype) if (Ui is not None)
+             else numpy.zeros(self.core.shape, dtype=self.core.dtype) for Ui in U0)
         # the corresponding wavelet coefficients
-        self.C1_list = pywt.wavedec2(U1, self.wav, level=self.levels_decomp,
-                                     mode=self.wav_boundary_condition)
-        self.C2_list = pywt.wavedec2(U2, self.wav, level=self.levels_decomp,
-                                     mode=self.wav_boundary_condition)
+        self.C_list = [pywt.wavedec2(Ui, self.wav, level=self.levels_decomp,
+                                     mode=self.wav_boundary_condition) for Ui in U]
         # which we reshape as arrays to get the slices for future manipulations.
-        _, self.slices1 = pywt.coeffs_to_array(self.C1_list)
-        _, self.slices2 = pywt.coeffs_to_array(self.C2_list)
+        self.slices = tuple(pywt.coeffs_to_array(Ci)[1] for Ci in self.C_list)
         ### Solve
         print('Decomposition over {} scales of details, {} estimated'.format(
             self.levels_decomp, self.levels_estim))
@@ -207,32 +204,30 @@ class Typhoon:
         for level in range(self.levels_estim+1):
             print('details ({})'.format(level) if level else 'approx. (0)')
             # the initial condition, as array (Note: flattened by l-bfgs)
-            C1_array, _ = pywt.coeffs_to_array(self.C1_list[:level+1])
-            C2_array, _ = pywt.coeffs_to_array(self.C2_list[:level+1])
-            C12_array = numpy.vstack((C1_array[numpy.newaxis,...], C2_array[numpy.newaxis,...]))
-            C12_shape = C12_array.shape
+            C_array = (pywt.coeffs_to_array(Ci[:level+1])[0] for Ci in self.C_list)
+            C_array = numpy.vstack((Ci[numpy.newaxis,...] for Ci in C_array))
+            # so that C_array[i] contains all coefficients of component i.
+            # we remember the shape for future manipulations.
+            C_shape = C_array.shape
             # create the cost function for this step
-            f_g = self.create_cost_function(level, C12_shape)
+            f_g = self.create_cost_function(level, C_shape)
             # minimize
-            C12_array, min_value, optim_info = optimize.fmin_l_bfgs_b(f_g,
-                                                                      C12_array.astype(numpy.float64),
-                                                                      factr=1000.,
-                                                                      iprint=0)
+            C_array, min_value, optim_info = optimize.fmin_l_bfgs_b(f_g,
+                                                                    C_array.astype(numpy.float64),
+                                                                    factr=1000.,
+                                                                    iprint=0)
             print('\tl-bfgs completed with status {warnflag} - {nit} iterations, {funcalls} calls'.format(**optim_info))
             print('\tcurrent functional value: {:.2f}'.format(min_value))
-            # store result
-            C12_array = C12_array.reshape(C12_shape)
-            C1_list = pywt.array_to_coeffs(C12_array[0], self.slices1[:level+1],
-                                           output_format='wavedec2')
-            C2_list = pywt.array_to_coeffs(C12_array[1], self.slices2[:level+1],
-                                            output_format='wavedec2')
-            for l in range(level+1):
-                self.C1_list[l] = C1_list[l]
-                self.C2_list[l] = C2_list[l]
+            # store result in main coefficients
+            C_array = C_array.reshape(C_shape)
+            C_list = (pywt.array_to_coeffs(Ci, self.slices[i][:level+1], output_format='wavedec2')
+                      for i, Ci in enumerate(C_array))
+            for n, Ci in enumerate(C_list):
+                for l in range(level+1):
+                    self.C_list[n][l] = Ci[l]
         ### Rebuild field and return
-        U1 = pywt.waverec2(self.C1_list, self.wav, mode=self.wav_boundary_condition)
-        U2 = pywt.waverec2(self.C2_list, self.wav, mode=self.wav_boundary_condition)
-        return U1, U2
+        U = [pywt.waverec2(Ci, self.wav, mode=self.wav_boundary_condition) for Ci in self.C_list]
+        return U
 
     def create_cost_function(self, step, shape):
         """The cost function takes wavelet coefficient as input parameters;
@@ -264,30 +259,27 @@ class Typhoon:
             ### rebuild motion field
             # reshape 1d vector to 3d array
             x = x.reshape(shape).astype(self.core.dtype)
-            # extract coefficients, reshape for pywt
-            C1_list = pywt.array_to_coeffs(x[0], self.slices1[:step+1],
-                                           output_format='wavedec2') + self.C1_list[step+1:]
-            C2_list = pywt.array_to_coeffs(x[1], self.slices2[:step+1],
-                                            output_format='wavedec2') + self.C2_list[step+1:]
+            # extract coefficients, complement with finer scales and reshape for pywt
+            # Note: ideally we would not complement, as finer scales are zeros. This is made
+            #   necessary by pywt.
+            C_list = (pywt.array_to_coeffs(xi, self.slices[i][:step+1],
+                                           output_format='wavedec2')
+                      + self.C_list[i][step+1:] for i, xi in enumerate(x))
             # rebuild motion field
-            U1 = pywt.waverec2(C1_list, self.wav, mode=self.wav_boundary_condition)
-            U2 = pywt.waverec2(C2_list, self.wav, mode=self.wav_boundary_condition)
+            U = (pywt.waverec2(Ci, self.wav, mode=self.wav_boundary_condition) for Ci in C_list)
             ### evaluate DFD and gradient
-            func_value, (grad1, grad2) = self.core.DFD_gradient(self.im0, self.im1, (U1, U2))
-            # decompose gradient over wavelet basis, keep only up to current step
-            G1_list = pywt.wavedec2(grad1, self.wav, level=self.levels_decomp,
+            func_value, G = self.core.DFD_gradient(self.im0, self.im1, U)
+            # decompose gradient over wavelet basis, keep coefficients only up to current step
+            G_list = (pywt.wavedec2(Gi, self.wav, level=self.levels_decomp,
                                     mode=self.wav_boundary_condition)[:step+1]
-            G2_list = pywt.wavedec2(grad2, self.wav, level=self.levels_decomp,
-                                    mode=self.wav_boundary_condition)[:step+1]
-            # reshape as array
-            G1_array, _ = pywt.coeffs_to_array(G1_list)
-            G2_array, _ = pywt.coeffs_to_array(G2_list)
-            # flatten and concatenate for l-bfgs
-            G12_array = numpy.concatenate((G1_array.ravel(), G2_array.ravel()))
+                      for Gi in G)
+            # reshape as array, flatten and concatenate for l-bfgs
+            G_array = numpy.hstack(
+                (pywt.coeffs_to_array(Gi)[0].ravel() for Gi in G_list))
             ### evaluate regularizer and its gradient
             # [TODO]
-            ### return DFD + regul value, and its gradient w.r.t. x
-            return func_value, G12_array.astype(numpy.float64)
+            ### return DFD (+ regul) value, and its gradient w.r.t. x
+            return func_value, G_array.astype(numpy.float64)
         return f_g
 
 ### Helpers ###
@@ -344,7 +336,7 @@ if __name__=="__main__":
         tstart = time.clock()
         U1, U2 = typhoon.solve(im0, im1, wav='db2',
                                levels_decomp=3, levels_estim=1,
-                               U1_0=None, U2_0=None)
+                               U0=None)
         tend = time.clock()
         print('Estimation completed in {:.2f} s.'.format(tend-tstart))
         ### post-process & display
