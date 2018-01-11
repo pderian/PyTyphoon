@@ -41,8 +41,6 @@ import pywt
 import scipy
 import scipy.ndimage as ndimage
 import scipy.optimize as optimize
-import scipy.interpolate as interpolate
-import matplotlib.pyplot as pyplot #TMP
 ###
 
 class OpticalFlowCore:
