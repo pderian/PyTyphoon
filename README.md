@@ -29,9 +29,19 @@ See `python pytyphoon.py -h` for the complete list of parameters.
 
 ## Demos
 
-### Synthetic particle images
-Run `python pytyphoon.py --demo particles`.
+### (2D) Synthetic particle images
+Simple 2d estimation using synthetic particle images (256x256 pixels).Run:
+```
+python pytyphoon.py --demo particles
+```
 ![Particle results](demo/demo_particles.png)
+
+### (3D) Homogeneous shift
+Simple 3d estimation using synthetic images (64x64x64 pixels) obtained by filtering random normal noise at various scales. The displacements are integer shifts along each of the 3 dimensions. Run:
+```
+python pytyphoon.py --demo 3dshift
+```
+![3dshift results](demo/demo_3dshift.png)
 
 ## References
 - [(D&eacute;rian et al., 2013)]
