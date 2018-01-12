@@ -12,9 +12,9 @@ At the moment, the wavelet-based data DFD term [(D&eacute;rian et al., 2013)] on
 Tested with Anaconda Python 3.6.1, Numpy 1.12.1, Scipy 0.19.1, PyWavelet 0.5.2.
 
 ## Todo
-- multi-pass estimation (pyramid) for very large displacements;
-- 3D extension?;
 - some regularizers;
+- support of masks;
+- alternative penalization functions;
 - ...
 
 ## Usage
@@ -30,7 +30,7 @@ See `python pytyphoon.py -h` for the complete list of parameters.
 ## Demos
 
 ### (2D) Synthetic particle images
-Simple 2d estimation using synthetic particle images (256x256 pixels).Run:
+Simple 2d estimation using synthetic particle images (256x256 pixels) originally created for the [FLUID project](http://fluid.irisa.fr/data-eng.htm) (image database #1). Run:
 ```
 python pytyphoon.py --demo particles
 ```
