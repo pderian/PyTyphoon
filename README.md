@@ -16,13 +16,6 @@ reference* for many reasons, and it is obviously much slower.
 
 Tested with Anaconda Python 3.6.1, Numpy 1.12.1, Scipy 0.19.1, PyWavelet 0.5.2.
 
-## Todo
-- some regularizers;
-- support of masks;
-- alternative penalization functions;
-- divergence-free wavelets;
-- ...
-
 ## Usage
 The `Typhoon` class can be imported from other modules/scripts to perform estimations as needed.
 
@@ -51,7 +44,7 @@ python pytyphoon.py --demo 3dshift
 ```
 ![3dshift results](demo/demo_3dshift.png)
 
-### (3D) Homogeneous shift
+### (3D) Column vortex
 Simple 3d estimation using synthetic images (96x96x96 pixels) obtained by filtering random normal noise at various scales. The displacement field is a column vortex (first two axes) with an updraft increasing linearly along the third axis. Run:
 ```
 python pytyphoon.py --demo 3dvortex
@@ -79,3 +72,10 @@ python pytyphoon.py --demo 3dvortex
 [(D&eacute;rian et al., 2015)]: http://journals.ametsoc.org/doi/abs/10.1175/JTECH-D-15-0010.1
 [(D&eacute;rian et al., 2013)]: https://www.cambridge.org/core/journals/numerical-mathematics-theory-methods-and-applications/article/wavelets-and-optical-flow-motion-estimation/2A9D13B316F000F0530AD42621B42FFD
 [(Kadri-Harouna et al., 2013)]: https://link.springer.com/article/10.1007/s11263-012-0595-7
+
+## Todo
+- some regularizers;
+- support of masks;
+- alternative penalization functions;
+- divergence-free wavelets;
+- ...
