@@ -74,8 +74,9 @@ python pytyphoon.py --demo 3dvortex
 [(Kadri-Harouna et al., 2013)]: https://link.springer.com/article/10.1007/s11263-012-0595-7
 
 ## Todo
-- some regularizers;
+- **NetCDF for output results?** in standalone mode;
 - support of masks;
+- some regularizers;
 - alternative penalization functions;
 - divergence-free wavelets;
 - ...
