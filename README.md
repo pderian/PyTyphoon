@@ -31,9 +31,13 @@ See `python pytyphoon.py -h` for the complete list of parameters.
 Typhoon solves a **dense variational optical flow** problem, that is to say: (i) it provides one motion vector at every pixel of input images and (ii) it estimates the entire vector field altogether.
 
 To do so, it looks for the motion field which minimizes the **displaced frame difference** (DFD):
+
 ![DFD](doc/dfd.png)
+
 This is achieved by minimizing the following functional:
+
 ![DFD functional](doc/dfd_func.png)
+
 where the integral is taken over the image.
 The functional above is **non-linear with respect to the motion field**.
 This has the advantage of better handling large displacement, but complicates the minimization process.
