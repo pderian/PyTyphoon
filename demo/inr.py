@@ -48,7 +48,7 @@ def readINR(fileName, printInfo=False):
             print(str(key)+' not found !')
         # read pixel size (in BITS)
         key = sizeKey
-        match = re.search(key+'=(?P<val>[0-9]+) bits',header)
+        match = re.search(key+'=(?P<val>[0-9]+) bits', header)
         if match:
             dataBitSize = int(match.group('val'))
         else:

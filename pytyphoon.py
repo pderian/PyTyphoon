@@ -189,6 +189,7 @@ class Typhoon:
 
         Written by P. DERIAN 2018-01-09.
         Updated by P. DERIAN 2018-01-11: generic n-d version, checked levels, checked shapes.
+        Updated by P. DERIAN 2018-06-11: fixed first-guess motion (U0) which was not paded when needed.
         """
         ### Wavelets
         # check arguments
@@ -221,12 +222,12 @@ class Typhoon:
         # if necessary with zeros
         block_size = 2**self.levels_decomp
         # how much is missing in each axis
-        self.padd_size = tuple((block_size - (s%block_size))%block_size for s in im0.shape)
+        self.pad_size = tuple((block_size - (s%block_size))%block_size for s in im0.shape)
         # the slice to crop back the original area
-        self.crop_slice = tuple(slice(None, -p if p else None, None) for p in self.padd_size)
+        self.crop_slice = tuple(slice(None, -p if p else None, None) for p in self.pad_size)
         # padd if necessary
-        if any(self.padd_size):
-            padding = [(0, p) for p in self.padd_size]
+        if any(self.pad_size):
+            padding = [(0, p) for p in self.pad_size]
             im0 = numpy.pad(im0, padding, mode='constant')
             im1 = numpy.pad(im1, padding, mode='constant')
         # create a new core if the image shape is not compatible
@@ -239,15 +240,25 @@ class Typhoon:
         self.im1 = im1.astype(self.core.dtype)
 
         ### Motion fields
-        # initialize with given fields, if any, otherwise with zeros.
+        # get a sequence of the proper length
         if U0 is None:
             U0 = [None,]*self.core.ndim
-        U = (Ui.astype(self.core.dtype) if (Ui is not None)
-             else numpy.zeros(self.core.shape, dtype=self.core.dtype) for Ui in U0)
+        # for each component
+        U = []
+        for Ui in U0:
+            # if None, initialize with zeros
+            if Ui is None:
+                Ui = numpy.zeros(self.core.shape, dtype=self.core.dtype)
+            # else pad the given field if necessary
+            elif any(self.pad_size):
+                padding = [(0, p) for p in self.pad_size]
+                Ui = numpy.pad(Ui, padding, mode='constant')
+            U.append(Ui)
+        # as a tuple
+        U = tuple(U)
         # the corresponding wavelet coefficients
         self.C_list = [pywt.wavedecn(Ui, self.wav, level=self.levels_decomp,
                                      mode=self.wav_boundary_condition) for Ui in U]
-        tmp_list = [pywt.waverecn(Ci, self.wav, mode=self.wav_boundary_condition) for Ci in self.C_list]
         # which we reshape as arrays to get the slices for future manipulations.
         self.slices = tuple(pywt.coeffs_to_array(Ci)[1] for Ci in self.C_list)
 
@@ -575,14 +586,14 @@ if __name__=="__main__":
                           vmin=0, vmax=1)
                 ax.set_xticks([])
                 ax.set_yticks([])
-                ax.set_title('im{} @ mid-ax{}'.format(j, i))
+                ax.set_title('im{} @ mid-ax{}'.format(j, i+1))
             # for each component
             for j, (ax, Uj) in enumerate(zip(axes[i,2:], U), 1):
                 pc = ax.imshow(Uj[slice_mid], interpolation='nearest', cmap='RdYlBu_r',
                                vmin=-3, vmax=3)
                 ax.set_xticks([])
                 ax.set_yticks([])
-                ax.set_title('U{} @ mid-ax{}'.format(j, i))
+                ax.set_title('U{} @ mid-ax{}'.format(j, i+1))
         pyplot.subplots_adjust(left=.1, right=.9, bottom=.14, top=.9, hspace=.3)
         # colorbar
         cax = fig.add_axes([.75, 0.05, .2, 0.03])
@@ -664,10 +675,11 @@ if __name__=="__main__":
         print('Estimation completed in {:.2f} s.'.format(tend-tstart))
 
         ### post-process and display
+        # show the 3 component in the middle plane along each axis
         rmse = RMSE(U_truth, U)
         dpi = 72.
         fig, axes = pyplot.subplots(3, 5, figsize=(800./dpi, 450./dpi))
-        # show the 3 component in the middle plane along each axis
+        # for each axis
         slice_all = slice(None, None, None)
         for i in range(3):
             # slice of the mid-plane along this axis
@@ -680,7 +692,7 @@ if __name__=="__main__":
                 ax.autoscale(tight=True)
                 ax.set_xticks([])
                 ax.set_yticks([])
-                ax.set_title('im{} @ mid-ax{}'.format(j, i))
+                ax.set_title('im{} @ mid-ax{}'.format(j, i+1))
             # for each component
             for j, (ax, Uj) in enumerate(zip(axes[i,2:], U), 1):
                 pc = ax.imshow(Uj[slice_mid], interpolation='nearest', cmap='RdYlBu_r',
@@ -688,7 +700,7 @@ if __name__=="__main__":
                 ax.set_aspect('equal')
                 ax.set_xticks([])
                 ax.set_yticks([])
-                ax.set_title('U{} @ mid-ax{}'.format(j, i))
+                ax.set_title('U{} @ mid-ax{}'.format(j, i+1))
         pyplot.subplots_adjust(left=.1, right=.9, bottom=.14, top=.95, hspace=.3)
         # colorbar
         cax = fig.add_axes([.565, 0.05, .2, 0.03])
