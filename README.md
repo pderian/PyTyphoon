@@ -12,7 +12,7 @@ reference** for many reasons, and it is obviously much slower.
 ## Requirements
 - [Numpy, Scipy](https://scipy.org/);
 - [PyWavelets](https://github.com/PyWavelets/pywt);
-- [Matplotlib](https://matplotlib.org/) for the demos.
+- [Pillow](https://pillow.readthedocs.io/) and [Matplotlib](https://matplotlib.org/) for the demos.
 
 Tested with Anaconda Python 3.6.1, Numpy 1.12.1, Scipy 0.19.1, PyWavelet 0.5.2.
 
