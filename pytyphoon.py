@@ -11,6 +11,7 @@ Disclaimer: The reference implementation used in [3], [4] is written in C++ and
 
 Dependencies:
     - numpy, scipy;
+    - Pillow;
     - pywavelets.
 
 References:
@@ -450,6 +451,7 @@ if __name__=="__main__":
     ###
     import matplotlib
     import matplotlib.pyplot as pyplot
+    from PIL import Image
     ###
     import demo.inr as inr
     ###
@@ -471,8 +473,9 @@ if __name__=="__main__":
         print('\n* PyTyphoon {} ({}) – "particles" demo'.format(__version__, __file__))
 
         ### load data
-        im0 = ndimage.imread('demo/run010050000.tif', flatten=True).astype(float)/255.
-        im1 = ndimage.imread('demo/run010050010.tif', flatten=True).astype(float)/255.
+        im0 = numpy.array(Image.open('demo/run010050000.tif').convert(mode='L')).astype(float)/255.
+        im1 = numpy.array(Image.open('demo/run010050010.tif').convert(mode='L')).astype(float)/255.
+
         # Note:
         #   - U1, V1 are vertical (1st axis) components;
         #   - U2, V2 are horizontal (2nd axis) components.
@@ -783,8 +786,8 @@ if __name__=="__main__":
         if args.im0 and args.im1:
             print('\nEstimation:\n\t{}\n\t{}'.format(args.im0, args.im1))
             ### load images
-            im0 = ndimage.imread(args.im0, flatten=True).astype(numpy.float32)/255.
-            im1 = ndimage.imread(args.im1, flatten=True).astype(numpy.float32)/255.
+            im0 = numpy.array(Image.open(args.im0).convert(mode='L')).astype(numpy.float32)/255.
+            im1 = numpy.array(Image.open(args.im1).convert(mode='L')).astype(numpy.float32)/255.
             ### Solve problem
             tstart = time.clock()
             (U1, U2), typhoon = Typhoon.solve_pyramid(im0, im1, levels_pyr=args.levels_pyr,
