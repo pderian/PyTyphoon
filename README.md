@@ -14,7 +14,7 @@ reference** for many reasons, and it is obviously much slower.
 - [PyWavelets](https://github.com/PyWavelets/pywt);
 - [Pillow](https://pillow.readthedocs.io/) and [Matplotlib](https://matplotlib.org/) for the demos.
 
-Tested with Anaconda Python 3.6.1, Numpy 1.12.1, Scipy 0.19.1, PyWavelet 0.5.2.
+Tested with Python 3.12, Numpy 2.5.4, Scipy 1.18.1, PyWavelet 1.10.0.
 
 ## Usage
 The `Typhoon` class can be imported from other modules/scripts to perform estimations as needed.

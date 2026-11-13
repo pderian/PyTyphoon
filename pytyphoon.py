@@ -70,7 +70,7 @@ class OpticalFlowCore:
         self.x = tuple(numpy.arange(s, dtype=self.dtype) for s in self.shape)
         # N-D
         self.X = numpy.indices(self.shape, dtype=self.dtype)
-        self.Xcoords = numpy.vstack((X.ravel() for X in self.X))
+        self.Xcoords = numpy.vstack(list(X.ravel() for X in self.X))
         ### Misc parameters
         self.sigma_blur = sigma_blur #gaussian blur sigma before spatial gradient computation
         self.interpolation_order = interpolation_order #pixel interpolation order
@@ -128,17 +128,17 @@ class OpticalFlowCore:
         map_coords = self.Xcoords.copy()
         for n, Ui in enumerate(U):
             map_coords[n] += Ui.ravel()
-        ndimage.interpolation.map_coordinates(im1, map_coords,
-                                              output=self.buffer,
-                                              order=self.interpolation_order,
-                                              mode=self.boundary_condition)
+        ndimage.map_coordinates(im1, map_coords,
+                                output=self.buffer,
+                                order=self.interpolation_order,
+                                mode=self.boundary_condition)
         im1_warp = self.buffer.reshape(self.shape)
         # difference
         dfd = im1_warp - im0
         # spatial gradients
         # [TODO] use derivative of gaussians?
         if self.sigma_blur>0:
-            im1_warp = ndimage.filters.gaussian_filter(im1_warp, self.sigma_blur)
+            im1_warp = ndimage.gaussian_filter(im1_warp, self.sigma_blur)
         grad = numpy.gradient(im1_warp)
         grad = (g*dfd for g in grad)
         # return
@@ -271,7 +271,7 @@ class Typhoon:
             print('details ({})'.format(level) if level else 'approx. (0)')
             # the initial condition, as array (Note: flattened by l-bfgs)
             C_array = (pywt.coeffs_to_array(Ci[:level+1])[0] for Ci in self.C_list)
-            C_array = numpy.vstack((Ci[numpy.newaxis,...] for Ci in C_array))
+            C_array = numpy.vstack(list(Ci[numpy.newaxis,...] for Ci in C_array))
             # so that C_array[i] contains all coefficients of component i.
             # we remember the shape for future manipulations.
             C_shape = C_array.shape
@@ -280,8 +280,7 @@ class Typhoon:
             # minimize
             C_array, min_value, optim_info = optimize.fmin_l_bfgs_b(f_g,
                                                                     C_array.astype(numpy.float64),
-                                                                    factr=1000.,
-                                                                    iprint=0)
+                                                                    factr=1000.)
             print('\tl-bfgs completed with status {warnflag} - {nit} iterations, {funcalls} calls'.format(**optim_info))
             print('\tcurrent functional value: {:.2f}'.format(min_value))
             # store result in main coefficients
@@ -365,7 +364,7 @@ class Typhoon:
                       for Gi in G)
             # reshape as array, flatten and concatenate for l-bfgs
             G_array = numpy.hstack(
-                (pywt.coeffs_to_array(Gi)[0].ravel() for Gi in G_list))
+                list(pywt.coeffs_to_array(Gi)[0].ravel() for Gi in G_list))
             ### evaluate regularizer and its gradient
             # [TODO]
             ### return DFD (+ regul) value, and its gradient w.r.t. x
@@ -484,10 +483,10 @@ if __name__=="__main__":
 
         ### solve OF
         typhoon = Typhoon()
-        tstart = time.clock()
+        tstart = time.perf_counter()
         U1, U2 = typhoon.solve(im0, im1, wav='db2', mode='periodization',
                                levels_decomp=3, levels_estim=1)
-        tend = time.clock()
+        tend = time.perf_counter()
         print('Estimation completed in {:.2f} s.'.format(tend-tstart))
 
         ### post-process & display
@@ -567,9 +566,9 @@ if __name__=="__main__":
 
         ### perform estimation
         typhoon = Typhoon()
-        tstart = time.clock()
+        tstart = time.perf_counter()
         U = typhoon.solve_fast(im0, im1, wav='db2', levels_decomp=3, levels_estim=1)
-        tend = time.clock()
+        tend = time.perf_counter()
         print('Estimation completed in {:.2f} s.'.format(tend-tstart))
 
         ### post-process and display
@@ -578,11 +577,11 @@ if __name__=="__main__":
         dpi = 72.
         fig, axes = pyplot.subplots(3, 5, figsize=(800./dpi, 450./dpi))
         # show the 3 component in the middle plane along each axis
-        slice_all = slice(None, None, None)
         for i in range(3):
             # slice of the mid-plane along this axis
-            slice_mid = [slice_all, slice_all, slice_all]
-            slice_mid[i] = size//2
+            slice_mid = [slice(None)] * 3
+            slice_mid[i] = size // 2
+            slice_mid = tuple(slice_mid)
             # for each image
             for j, (ax, imj) in enumerate(zip(axes[i,:2], [im0, im1])):
                 ax.imshow(imj[slice_mid], interpolation='nearest', cmap='gray',
@@ -655,14 +654,14 @@ if __name__=="__main__":
                    (X3 - margin)*(beta/float(size))) #divide by n_adv due to multiple steps
         # displacement coordinates
         n_adv = 30 #number of advection steps
-        map_coords = numpy.vstack((X.ravel() for X in (X1, X2, X3))) #for interpolation
+        map_coords = numpy.vstack(list(X.ravel() for X in (X1, X2, X3))) #for interpolation
         for n, Ui in enumerate(U_truth):
             map_coords[n] -= (1./float(n_adv))*Ui.ravel()
         # very crude advection
         im1 = im0
         for _ in range(n_adv):
-            im1 = ndimage.interpolation.map_coordinates(im1, map_coords, order=3,
-                                                        mode='constant').reshape(im0.shape)
+            im1 = ndimage.map_coordinates(im1, map_coords, order=3,
+                                          mode='constant').reshape(im0.shape)
         # finally retain only the working area
         if margin>0:
             im0 = im0[margin:-margin, margin:-margin, margin:-margin]
@@ -672,9 +671,9 @@ if __name__=="__main__":
         ### perform estimation
         # instance typhoon so we can use its internal coordinates for simplicity.
         typhoon = Typhoon()
-        tstart = time.clock()
+        tstart = time.perf_counter()
         U = typhoon.solve_fast(im0, im1, wav='db3', levels_decomp=3, levels_estim=0)
-        tend = time.clock()
+        tend = time.perf_counter()
         print('Estimation completed in {:.2f} s.'.format(tend-tstart))
 
         ### post-process and display
@@ -683,11 +682,11 @@ if __name__=="__main__":
         dpi = 72.
         fig, axes = pyplot.subplots(3, 5, figsize=(800./dpi, 450./dpi))
         # for each axis
-        slice_all = slice(None, None, None)
         for i in range(3):
             # slice of the mid-plane along this axis
-            slice_mid = [slice_all, slice_all, slice_all]
-            slice_mid[i] = size//2
+            slice_mid = [slice(None)] * 3
+            slice_mid[i] = size // 2
+            slice_mid = tuple(slice_mid)
             # for each image
             for j, (ax, imj) in enumerate(zip(axes[i,:2], [im0, im1])):
                 ax.imshow(imj[slice_mid], interpolation='nearest', cmap='gray',
@@ -789,7 +788,7 @@ if __name__=="__main__":
             im0 = numpy.array(Image.open(args.im0).convert(mode='L')).astype(numpy.float32)/255.
             im1 = numpy.array(Image.open(args.im1).convert(mode='L')).astype(numpy.float32)/255.
             ### Solve problem
-            tstart = time.clock()
+            tstart = time.perf_counter()
             (U1, U2), typhoon = Typhoon.solve_pyramid(im0, im1, levels_pyr=args.levels_pyr,
                                                       solve_fast=args.solve_fast,
                                                       wav=args.wav, mode=args.mode,
@@ -797,7 +796,7 @@ if __name__=="__main__":
                                                       levels_estim=args.levels_estim,
                                                       interpolation_order=args.interpolation_order,
                                                       sigma_blur=args.sigma_blur)
-            tend = time.clock()
+            tend = time.perf_counter()
             print('Estimation completed in {:.2f} s.'.format(tend-tstart))
             # export
             # [TODO] retrieve estim parameters and save as well.
