@@ -21,7 +21,6 @@ from .core import OpticalFlowCore
 from .typhoon import Typhoon
 from .utils import RMSE
 from .regularizers import HighOrderRegularizerConv, HighOrderRegularizerMat
-from . import cli
 
 __version__ = "0.2.0"
 __all__ = [
@@ -30,6 +29,5 @@ __all__ = [
     'RMSE',
     'HighOrderRegularizerConv',
     'HighOrderRegularizerMat',
-    'cli',
     '__version__'
 ]

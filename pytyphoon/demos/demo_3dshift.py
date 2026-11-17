@@ -6,15 +6,12 @@ Estimation is performed with the basic "fast" solver.
 """
 
 import logging
-import sys
 import time
 from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+import scipy.ndimage
 
 from pytyphoon.typhoon import Typhoon
 

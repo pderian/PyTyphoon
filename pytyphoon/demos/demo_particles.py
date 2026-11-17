@@ -6,16 +6,12 @@ for the FLUID project (image database #1).
 
 import logging
 import os
-import sys
 import time
 from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from pytyphoon.typhoon import Typhoon
 from pytyphoon.utils import RMSE
@@ -26,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 # Try to import demo utilities
 try:
-    demo_path = Path(__file__).parent.parent.parent / 'demo'
+    demo_path = Path(__file__).parent.parent.parent.parent / 'demo'
+    import sys
     sys.path.insert(0, str(demo_path))
     import inr
     HAS_INR = True

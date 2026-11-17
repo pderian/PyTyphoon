@@ -218,7 +218,7 @@ def main(argv: Optional[list] = None) -> None:
             try:
                 demo_module = __import__(f'pytyphoon.demos.{demos[args.demo_name]}',
                                        fromlist=[demos[args.demo_name]])
-                demo_func = getattr(demo_module, args.demo_name)
+                demo_func = getattr(demo_module, demos[args.demo_name])
                 demo_func()
             except ImportError as e:
                 logger.error(f"Could not load demo '{args.demo_name}': {e}")
