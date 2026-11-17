@@ -1,0 +1,9 @@
+include README.md
+include LICENSE
+include REFACTORING_SUMMARY.md
+
+recursive-include demo *.tif
+recursive-include demo *.inr
+recursive-include demo *.png
+recursive-include demo *.py
+recursive-include doc *.png

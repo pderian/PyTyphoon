@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "PyTyphoon"
+version = "0.2.0"
+description = "Python implementation of the Typhoon algorithm for dense 2D/3D optical flow estimation"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Pierre Derian", email = "contact@pierrederian.net"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.20.0",
+    "scipy>=1.7.0",
+    "pywavelets>=1.2.0",
+    "Pillow>=8.0.0",
+    "matplotlib>=3.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=22.0.0",
+    "flake8>=4.0.0",
+    "mypy>=0.900",
+]
+docs = [
+    "sphinx>=4.0.0",
+    "sphinx-rtd-theme>=0.5.0",
+]
+
+[project.scripts]
+pytyphoon = "pytyphoon.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pytyphoon*"]
+exclude = ["demo*", "doc*", "legacy*", "test*"]
