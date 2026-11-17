@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Try to import demo utilities
 try:
-    demo_path = Path(__file__).parent.parent.parent.parent / 'demo'
+    demo_path = Path(__file__).parent.parent.parent / 'demo'
     import sys
     sys.path.insert(0, str(demo_path))
     import inr
