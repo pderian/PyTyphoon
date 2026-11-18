@@ -63,11 +63,11 @@ def test_typhoon_basic():
         # Create simple synthetic images with known motion
         size = 32
         im0 = np.random.rand(size, size).astype(np.float32)
-        im1 = np.roll(im0, shift=2, axis=1)  # Simple horizontal shift
+        im1 = np.roll(im0, shift=1, axis=1)  # Simple horizontal shift
 
         # Create Typhoon instance and solve
         typhoon = Typhoon()
-        U = typhoon.solve_fast(im0, im1, wav='haar', levels_decomp=2, levels_estim=1)
+        U = typhoon.solve_fast(im0, im1, wav='haar', levels_decomp=3, levels_estim=2)
 
         # Check results
         assert len(U) == 2  # Should have 2 components for 2D
@@ -115,11 +115,11 @@ def test_regularizers():
         from pytyphoon.regularizers import HighOrderRegularizerConv
 
         # Create test data
-        wav = pywt.Wavelet('haar')
+        wav = pywt.Wavelet('db3')
         hor = HighOrderRegularizerConv(wav)
 
         # Create simple test coefficients
-        size = 16
+        size = 32
         U1 = np.random.rand(size, size).astype(np.float64)
         U2 = np.random.rand(size, size).astype(np.float64)
 

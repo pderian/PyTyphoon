@@ -19,12 +19,12 @@ Tested with Python 3.12, Numpy 2.5.4, Scipy 1.18.1, PyWavelet 1.10.0.
 ## Usage
 The `Typhoon` class can be imported from other modules/scripts to perform estimations as needed.
 
-The script can also work as a standalone estimator in simple cases, e.g.:
+The command-line interface works as a standalone estimator in simple cases, e.g.:
 ```
-python pytyphoon.py -i0 path/to/im0.jpg -i1 path/to/im1.jpg -wav 'db3' --display
+pytyphoon -i0 path/to/im0.jpg -i1 path/to/im1.jpg -wav 'db3' --display
 ```
 will solve the problem for image pair (`im0.jpg`, `im1.jpg`) and wavelet Daubechies-3.
-See `python pytyphoon.py -h` for the complete list of parameters.
+See `pytyphoon.py -h` for the complete list of parameters.
 
 ## How does it work?
 
@@ -53,21 +53,21 @@ These demos are shipped with the project.
 ### (2D) Synthetic particle images
 Simple 2d estimation using synthetic particle images (256x256 pixels) originally created for the [FLUID project](http://fluid.irisa.fr/data-eng.htm) (image database #1). Run:
 ```
-python pytyphoon.py --demo particles
+pytyphoon --demo particles
 ```
 ![Particle results](demo/demo_particles.png)
 
 ### (3D) Homogeneous shift
 Simple 3d estimation using synthetic images (64x64x64 pixels) obtained by filtering random normal noise at various scales. The displacements are integer shifts along each of the 3 dimensions. Run:
 ```
-python pytyphoon.py --demo 3dshift
+pytyphoon --demo 3dshift
 ```
 ![3dshift results](demo/demo_3dshift.png)
 
 ### (3D) Column vortex
 Simple 3d estimation using synthetic images (96x96x96 pixels) obtained by filtering random normal noise at various scales. The displacement field is a column vortex (first two axes) with an updraft increasing linearly along the third axis. Run:
 ```
-python pytyphoon.py --demo 3dvortex
+pytyphoon --demo 3dvortex
 ```
 ![3dshift results](demo/demo_3dvortex.png)
 
